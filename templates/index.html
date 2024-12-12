@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT 類似介面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+
+        #chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #chat-box {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+
+        .chat-item {
+            margin: 10px 0;
+            padding: 8px;
+            border-radius: 5px;
+            background-color: #e3e3e3;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .user {
+            background-color: #a0d6ff;
+            align-self: flex-end;
+        }
+
+        .assistant {
+            background-color: #f1f1f1;
+            align-self: flex-start;
+        }
+
+        #input-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+        }
+
+        #user-message {
+            width: 100%;
+            padding: 10px;
+            border-radius: 20px;
+            border: 1px solid #ccc;
+        }
+
+        #send-button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+
+        #send-button:hover {
+            background-color: #0056b3;
+        }
+
+        /* 美化對話框選擇 */
+        #conversation-select {
+            padding: 5px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <h2>與助手對話</h2>
+
+        <div id="conversation-list">
+            <h3>選擇對話來繼續：</h3>
+            <select id="conversation-select" onchange="loadConversation()">
+                <option value="">選擇對話</option>
+            </select>
+            <button onclick="startNewConversation()">開始新對話</button>
+        </div>
+
+        <div id="chat-box"></div>
+
+        <div id="input-box">
+            <input type="text" id="user-message" placeholder="輸入您的訊息..." />
+            <button id="send-button" onclick="sendMessage()">發送</button>
+        </div>
+    </div>
+
+    <script>
+        // 請求歷史對話列表
+        fetch('/get_conversation_choices')
+            .then(response => response.json())
+            .then(data => {
+                const select = document.getElementById("conversation-select");
+                data.forEach(choice => {
+                    const option = document.createElement("option");
+                    option.value = choice.value;
+                    option.textContent = choice.label;
+                    select.appendChild(option);
+                });
+            });
+
+        // 載入選擇的對話
+        function loadConversation() {
+            const conversationId = document.getElementById("conversation-select").value;
+            if (conversationId) {
+                fetch('/load_conversation', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ conversation_id: conversationId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    const chatBox = document.getElementById("chat-box");
+                    chatBox.innerHTML = '';
+                    data.messages.forEach(message => {
+                        const messageElement = document.createElement("div");
+                        messageElement.className = `chat-item ${message.role}`;
+                        messageElement.textContent = `${message.role}: ${message.content}`;
+                        chatBox.appendChild(messageElement);
+                    });
+
+                    chatBox.scrollTop = chatBox.scrollHeight; // 滾動到底部
+                })
+                .catch(error => {
+                    console.error('載入對話失敗:', error);
+                });
+            }
+        }
+
+        // 開始新對話
+        function startNewConversation() {
+            fetch('/start_new_conversation', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                const select = document.getElementById("conversation-select");
+                const newConversationId = data.conversation_id;
+                const option = document.createElement("option");
+                option.value = newConversationId;
+                option.textContent = `對話 ${newConversationId + 1}`;
+                select.appendChild(option);
+                loadConversation();
+            })
+            .catch(error => {
+                console.error('創建新對話失敗:', error);
+            });
+        }
+
+        // 發送用戶消息
+        function sendMessage() {
+            const userMessage = document.getElementById("user-message").value;
+            const conversationId = document.getElementById("conversation-select").value;
+
+            if (userMessage && conversationId) {
+                const chatBox = document.getElementById("chat-box");
+
+                // 顯示用戶消息
+                const userMessageElement = document.createElement("div");
+                userMessageElement.className = "chat-item user";
+                userMessageElement.textContent = `user: ${userMessage}`;
+                chatBox.appendChild(userMessageElement);
+
+                chatBox.scrollTop = chatBox.scrollHeight; // 滾動到底部
+
+                fetch('/send_message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: userMessage,
+                        conversation_id: conversationId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // 顯示助手回應
+                    const assistantMessageElement = document.createElement("div");
+                    assistantMessageElement.className = "chat-item assistant";
+                    assistantMessageElement.textContent = `assistant: ${data.messages[data.messages.length - 1].content}`;
+                    chatBox.appendChild(assistantMessageElement);
+
+                    chatBox.scrollTop = chatBox.scrollHeight; // 滾動到底部
+                })
+                .catch(error => {
+                    console.error('發送消息失敗:', error);
+                });
+
+                // 清空輸入框
+                document.getElementById("user-message").value = '';
+            }
+        }
+    </script>
+</body>
+</html>
